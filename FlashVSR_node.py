@@ -77,7 +77,7 @@ class FlashVSR_SM_KSampler(io.ComfyNode):
                 io.Int.Input("seed", default=0, min=0, max=MAX_SEED),
                 io.Int.Input("scale", default=4, min=1, max=4),
                 io.Float.Input("kv_ratio", default=3.5, min=0.0, max=10.0, step=0.1, round=0.01,),
-                io.Int.Input("local_range", default=9, min=1,step=1, max=50),
+                io.Int.Input("local_range", default=11, min=1,step=1, max=50),
                 io.Int.Input("steps", default=1, min=1, max=10000),
                 io.Float.Input("cfg", default=1.0, min=0.0, max=100.0, step=0.1, round=0.01,),
                 io.Float.Input("sparse_ratio", default=2.0, min=0.0, max=10.0, step=0.1,display_mode=io.NumberDisplay.slider),
