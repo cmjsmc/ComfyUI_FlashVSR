@@ -6,7 +6,7 @@ import torch
 import os
 from .model_loader_utils import  tensor_upscale
 from .FlashVSR.examples.WanVSR.infer_flashvsr_full import init_pipeline,run_inference
-from .FlashVSR.examples.WanVSR.infer_flashvsr_tiny import   init_pipeline_tiny
+from .FlashVSR.examples.WanVSR.infer_flashvsr_tiny import   init_pipeline_tiny,run_inference_tiny
 import folder_paths
 from typing_extensions import override
 from comfy_api.latest import ComfyExtension, io
@@ -94,7 +94,11 @@ class FlashVSR_SM_KSampler(io.ComfyNode):
         prompt_path=folder_paths.get_full_path("FlashVSR", emb_pt) if emb_pt != "none" else None
         context_tensor=Conditioning[0][0] if Conditioning is not  None else None
         assert prompt_path is not None or context_tensor is not None , "Please select the emb,or link a conditioning tensor"
-        images=run_inference(model,prompt_path,context_tensor,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio )
+        if hasattr(model,"TCDecoder") :
+            images=run_inference_tiny(model,prompt_path,context_tensor,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio )
+        else:
+            images=run_inference(model,prompt_path,context_tensor,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio )
+     
         return io.NodeOutput(images.float())
 
 from aiohttp import web
