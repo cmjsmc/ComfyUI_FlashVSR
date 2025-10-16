@@ -85,7 +85,7 @@ def upscale_then_center_crop(img: Image.Image, scale: float, tW: int, tH: int) -
     return up.crop((l, t, l + tW, t + tH))
 
 
-def prepare_input_tensor(path: str, scale: float = 4, dtype=torch.bfloat16, device='cuda'):
+def prepare_input_tensor(path: str, scale: float = 4,fps=30, dtype=torch.bfloat16, device='cuda'):
     if isinstance(path,torch.Tensor):
         total,h0,w0,_ = path.shape
         sW, sH, tW, tH = compute_scaled_and_target_dims(w0, h0, scale=scale, multiple=128)
@@ -232,6 +232,6 @@ def run_inference_tiny(pipe,prompt_path,context_tensor,input,seed,scale,kv_ratio
         local_range=local_range,  # Recommended: 9 or 11. local_range=9 → sharper details; 11 → more stable results.
         color_fix = True,
     )
-    video = tensor2video(video)
+    #video = tensor2video(video)
     print("Done.")
     return rearrange(video, "C T H W -> T H W C")
