@@ -2,8 +2,9 @@
 [FlashVSR](https://github.com/OpenImagingLab/FlashVSR): Towards Real-Time Diffusion-Based Streaming Video Super-Resolution,this node ,you can use it in comfyUI
 
 # Upadte
-*  test  cu128 torch2.8.0 Vram 12G
-*  choice vae infer full mode ，encoder infer tiny mode 选择vae跑full模式 效果最好，tiny则是速度
+*  Test  cu128 torch2.8.0 Vram 12G
+*  Choice vae infer full mode ，encoder infer tiny mode 选择vae跑full模式 效果最好，tiny则是速度
+*  如果觉得项目有用，请给官方项目[FlashVSR](https://github.com/OpenImagingLab/FlashVSR) 打星； if you Like it ， star the official project [link](https://github.com/OpenImagingLab/FlashVSR)
 
   
 1.Installation  
@@ -48,12 +49,13 @@ python setup.py install
   
 
 # Example
-![](https://github.com/smthemex/ComfyUI_OmniPart/blob/main/example_workflows/example.png)
+* tiny
+![](https://github.com/smthemex/ComfyUI_FlashVSR/blob/main/example_workflows/example.png)
 
 # Acknowledgements
-[DiffSynth Studio](https://github.com/modelscope/DiffSynth-Studio)
-[Block-Sparse-Attention](https://github.com/mit-han-lab/Block-Sparse-Attention)
-[taehv](https://github.com/madebyollin/taehv)
+[DiffSynth Studio](https://github.com/modelscope/DiffSynth-Studio)  
+[Block-Sparse-Attention](https://github.com/mit-han-lab/Block-Sparse-Attention)  
+[taehv](https://github.com/madebyollin/taehv)  
 
 # Citation
 ```
