@@ -196,7 +196,7 @@ def init_pipeline_tiny(LQ_proj_in_path = "./FlashVSR/LQ_proj_in.ckpt",ckpt_path=
     if os.path.exists(LQ_proj_in_path):
         pipe.denoising_model().LQ_proj_in.load_state_dict(torch.load(LQ_proj_in_path, map_location="cpu",weights_only=False,), strict=True)
     pipe.denoising_model().LQ_proj_in.to(device)
-
+    
     multi_scale_channels = [512, 256, 128, 128]
     pipe.TCDecoder = build_tcdecoder(new_channels=multi_scale_channels, new_latent_channels=16+768)
     mis = pipe.TCDecoder.load_state_dict(torch.load(TCDecoder_path,weights_only=False,), strict=False)
@@ -206,20 +206,9 @@ def init_pipeline_tiny(LQ_proj_in_path = "./FlashVSR/LQ_proj_in.ckpt",ckpt_path=
     # pipe.init_cross_kv(); pipe.load_models_to_device(["dit","vae"])
     return pipe
 
-def run_inference_tiny(pipe,prompt_path,context_tensor,input,seed,scale,kv_ratio=3.0,local_range=9,step=1,cfg_scale=1.0,sparse_ratio=2.0,dtype=torch.bfloat16,device="cuda"):
+def run_inference_tiny(pipe,prompt_path,input,seed,scale,kv_ratio=3.0,local_range=9,step=1,cfg_scale=1.0,sparse_ratio=2.0,color_fix=True,dtype=torch.bfloat16,device="cuda"):
     pipe.to('cuda'); pipe.enable_vram_management(num_persistent_param_in_dit=None)
-    pipe.init_cross_kv(prompt_path,context_tensor); pipe.load_models_to_device(["dit","vae"])
-    # RESULT_ROOT = "./results"
-    # os.makedirs(RESULT_ROOT, exist_ok=True)
-    # inputs = [
-    #     "./inputs/example0.mp4",
-    #     "./inputs/example1.mp4",
-    #     "./inputs/example2.mp4",
-    #     "./inputs/example3.mp4",
-    # ]
-    #seed, scale, dtype, device = 0, 4.0, torch.bfloat16, 'cuda'
-    #sparse_ratio = 2.0      # Recommended: 1.5 or 2.0. 1.5 → faster; 2.0 → more stable.
-    #pipe = init_pipeline()
+    pipe.init_cross_kv(prompt_path); pipe.load_models_to_device(["dit","vae"])
 
 
     torch.cuda.empty_cache(); torch.cuda.ipc_collect()
@@ -232,7 +221,7 @@ def run_inference_tiny(pipe,prompt_path,context_tensor,input,seed,scale,kv_ratio
         topk_ratio=sparse_ratio*768*1280/(th*tw), 
         kv_ratio=kv_ratio,
         local_range=local_range,  # Recommended: 9 or 11. local_range=9 → sharper details; 11 → more stable results.
-        color_fix = True,
+        color_fix = color_fix,
     )
     #video = tensor2video(video)
     print("Done.")
