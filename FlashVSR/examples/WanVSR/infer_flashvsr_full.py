@@ -192,39 +192,21 @@ def init_pipeline(LQ_proj_in_path="./FlashVSR/LQ_proj_in.ckpt",ckpt_path: str = 
 
 
 
-def run_inference(pipe,prompt_path,context_tensor,input,seed,scale,kv_ratio=3.0,local_range=9,step=1,cfg_scale=1.0,sparse_ratio=2.0,dtype=torch.bfloat16,device="cuda"):
+def run_inference(pipe,prompt_path,input,seed,scale,kv_ratio=3.0,local_range=9,step=1,cfg_scale=1.0,sparse_ratio=2.0,tiled=True,color_fix=True,dtype=torch.bfloat16,device="cuda"):
     pipe.to('cuda'); pipe.enable_vram_management(num_persistent_param_in_dit=None)
-    pipe.init_cross_kv(prompt_path,context_tensor); pipe.load_models_to_device(["dit","vae"])
-    #RESULT_ROOT = "./results"
-    #os.makedirs(RESULT_ROOT, exist_ok=True)
-    # inputs = [
-    #     "./inputs/example0.mp4",
-    #     "./inputs/example1.mp4",
-    #     "./inputs/example2.mp4",
-    #     "./inputs/example3.mp4",
-    # ]
-    #seed, scale, dtype, device = 0, 4, torch.bfloat16, 'cuda'
-    #sparse_ratio = 2.0      # Recommended: 1.5 or 2.0. 1.5 → faster; 2.0 → more stable.
-    #pipe = init_pipeline()
+    pipe.init_cross_kv(prompt_path); pipe.load_models_to_device(["dit","vae"])
+
 
     torch.cuda.empty_cache(); torch.cuda.ipc_collect()
     LQ, th, tw, F, fps = prepare_input_tensor(input, scale=scale, dtype=dtype, device=device)
-    #name = os.path.basename(p.rstrip('/'))
-    # if name.startswith('.'):
-    #     continue
-    # try:
-    #     LQ, th, tw, F, fps = prepare_input_tensor(p, scale=scale, dtype=dtype, device=device)
-    # except Exception as e:
-    #     print(f"[Error] {name}: {e}")
-    #     continue
 
     video = pipe(
-        prompt="", negative_prompt="", cfg_scale=cfg_scale, num_inference_steps=step, seed=seed, tiled=True,
+        prompt="", negative_prompt="", cfg_scale=cfg_scale, num_inference_steps=step, seed=seed, tiled=tiled,
         LQ_video=LQ, num_frames=F, height=th, width=tw, is_full_block=False, if_buffer=True,
         topk_ratio=sparse_ratio*768*1280/(th*tw), 
         kv_ratio=kv_ratio,
         local_range=local_range, # Recommended: 9 or 11. local_range=9 → sharper details; 11 → more stable results.
-        color_fix = True,
+        color_fix = color_fix,
     )
     #video = tensor2video(video)
     #save_video(video, os.path.join(RESULT_ROOT, f"FlashVSR_Full_{name.split('.')[0]}_seed{seed}.mp4"), fps=fps, quality=6)
