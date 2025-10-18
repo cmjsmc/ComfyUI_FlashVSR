@@ -1,0 +1,318 @@
+{
+  "id": "9c750e57-c31b-48bb-892b-6750cd511e79",
+  "revision": 0,
+  "last_node_id": 10,
+  "last_link_id": 13,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "FlashVSR_SM_Model",
+      "pos": [
+        970,
+        650
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FlashVSR_SM_Model",
+          "type": "FlashVSR_SM_Model",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "flashvsr",
+        "ver": "b2381b593b50a5a5af372c91f4d392c93dc03dac",
+        "Node name for S&R": "FlashVSR_SM_Model"
+      },
+      "widgets_values": [
+        "diffusion_pytorch_model_streaming_dmd.safetensors",
+        "LQ_proj_in.ckpt",
+        "wan_2.1_vae.safetensors",
+        "none"
+      ]
+    },
+    {
+      "id": 10,
+      "type": "FlashVSR_SM_KSampler",
+      "pos": [
+        1290,
+        820
+      ],
+      "size": [
+        280,
+        380
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "FlashVSR_SM_Model",
+          "link": 11
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "flashvsr",
+        "ver": "b2381b593b50a5a5af372c91f4d392c93dc03dac",
+        "Node name for S&R": "FlashVSR_SM_KSampler"
+      },
+      "widgets_values": [
+        "posi_prompt.pth",
+        512,
+        768,
+        0,
+        "randomize",
+        1,
+        3.5,
+        11,
+        1,
+        1,
+        2,
+        true,
+        true
+      ]
+    },
+    {
+      "id": 8,
+      "type": "GetVideoComponents",
+      "pos": [
+        1080,
+        930
+      ],
+      "size": [
+        140,
+        66
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            13
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "GetVideoComponents"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 9,
+      "type": "LoadVideo",
+      "pos": [
+        740,
+        840
+      ],
+      "size": [
+        270,
+        434
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "test1018.mp4",
+        "image"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "SaveVideo",
+      "pos": [
+        1890,
+        570
+      ],
+      "size": [
+        374,
+        659
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 7
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "mp4",
+        "h264"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "CreateVideo",
+      "pos": [
+        1580,
+        580
+      ],
+      "size": [
+        270,
+        78
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 12
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        16
+      ]
+    }
+  ],
+  "links": [
+    [
+      7,
+      6,
+      0,
+      7,
+      0,
+      "VIDEO"
+    ],
+    [
+      9,
+      9,
+      0,
+      8,
+      0,
+      "VIDEO"
+    ],
+    [
+      11,
+      1,
+      0,
+      10,
+      0,
+      "FlashVSR_SM_Model"
+    ],
+    [
+      12,
+      10,
+      0,
+      6,
+      0,
+      "IMAGE"
+    ],
+    [
+      13,
+      8,
+      0,
+      10,
+      1,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7513148009015777,
+      "offset": [
+        -226.58619502792203,
+        -340.6659064582848
+      ]
+    },
+    "frontendVersion": "1.27.10",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
