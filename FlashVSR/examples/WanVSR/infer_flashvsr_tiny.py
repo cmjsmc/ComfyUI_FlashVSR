@@ -92,6 +92,8 @@ def prepare_input_tensor(path: str, scale: float = 4,fps=30, dtype=torch.bfloat1
         path=tensor_upscale(path, tW, tH)
         idx = list(range(total)) + [total - 1] * 4
         F = largest_8n1_leq(len(idx))
+        idx = idx[:F]
+        path=path[idx, :, :, :]
         vid=path.permute(3,0,1,2).unsqueeze(0).to(device,dtype=torch.bfloat16)  # 1 C F H W
         #print(vid.shape) #torch.Size([1, 3, 121, 768, 1280])
         return vid, tH, tW, F, fps
