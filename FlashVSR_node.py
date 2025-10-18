@@ -72,32 +72,34 @@ class FlashVSR_SM_KSampler(io.ComfyNode):
                 io.Custom("FlashVSR_SM_Model").Input("model"),
                 io.Image.Input("image"),
                 io.Combo.Input("emb_pt",options= ["none"] + [i for i in folder_paths.get_filename_list("FlashVSR") if "prompt" in i.lower()]),
-                io.Int.Input("width", default=1280, min=128, max=nodes.MAX_RESOLUTION,step=128,display_mode=io.NumberDisplay.number),
-                io.Int.Input("height", default=768, min=128, max=nodes.MAX_RESOLUTION,step=128,display_mode=io.NumberDisplay.number),
+                io.Int.Input("width", default=1280, min=128, max=nodes.MAX_RESOLUTION,step=64,display_mode=io.NumberDisplay.number),
+                io.Int.Input("height", default=768, min=128, max=nodes.MAX_RESOLUTION,step=64,display_mode=io.NumberDisplay.number),
                 io.Int.Input("seed", default=0, min=0, max=MAX_SEED),
                 io.Int.Input("scale", default=4, min=1, max=4),
                 io.Float.Input("kv_ratio", default=3.5, min=0.0, max=10.0, step=0.1, round=0.01,),
                 io.Int.Input("local_range", default=11, min=1,step=1, max=50),
                 io.Int.Input("steps", default=1, min=1, max=10000),
                 io.Float.Input("cfg", default=1.0, min=0.0, max=100.0, step=0.1, round=0.01,),
-                io.Float.Input("sparse_ratio", default=2.0, min=0.0, max=10.0, step=0.1,display_mode=io.NumberDisplay.slider),
-                io.Conditioning.Input("Conditioning",optional=True),
-                
+                io.Float.Input("sparse_ratio", default=2.0, min=0.0, max=10.0, step=0.1,display_mode=io.NumberDisplay.slider), 
+                io.Boolean.Input("full_tiled", default=True),
+                io.Boolean.Input("color_fix", default=True),
+
             ],
             outputs=[
                 io.Image.Output(display_name="images"),
             ],
         )
     @classmethod
-    def execute(cls, model,image,emb_pt,width,height,seed,scale,kv_ratio,local_range, steps, cfg,sparse_ratio  ,Conditioning=None) -> io.NodeOutput:
+    def execute(cls, model,image,emb_pt,width,height,seed,scale,kv_ratio,local_range, steps, cfg,sparse_ratio,full_tiled,color_fix) -> io.NodeOutput:
         image=tensor_upscale(image,width, height)
         prompt_path=folder_paths.get_full_path("FlashVSR", emb_pt) if emb_pt != "none" else None
-        context_tensor=Conditioning[0][0] if Conditioning is not  None else None
-        assert prompt_path is not None or context_tensor is not None , "Please select the emb,or link a conditioning tensor"
+        assert prompt_path is not None  , "Please select the emb"
         if hasattr(model,"TCDecoder") :
-            images=run_inference_tiny(model,prompt_path,context_tensor,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio )
+            print("infer tiny mode")
+            images=run_inference_tiny(model,prompt_path,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio,color_fix )
         else:
-            images=run_inference(model,prompt_path,context_tensor,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio )
+            print("infer full mode")
+            images=run_inference(model,prompt_path,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio,full_tiled,color_fix )
      
         return io.NodeOutput(images.float())
 
