@@ -406,7 +406,6 @@ class FlashVSRFullPipeline(BasePipeline):
                     cur_latents = latents[:, :, 4+cur_process_idx*2:6+cur_process_idx*2, :, :]
 
                 # 推理（无 motion_controller / vace）
-                #print(cur_latents.shape,"cur_latents") #torch.Size([1, 16, 6, 384, 640]) scale 4  cur_latents orch.Size([1, 16, 6, 96, 160]) cur_latents scale 1
                 noise_pred_posi, pre_cache_k, pre_cache_v = model_fn_wan_video(
                     self.dit,
                     x=cur_latents,
@@ -431,7 +430,6 @@ class FlashVSRFullPipeline(BasePipeline):
                 cur_latents = cur_latents - noise_pred_posi
                 latents_total.append(cur_latents)
 
-            # --- START: MODIFICATION ---
             # This block provides a fallback for single images or short videos
             # where the main processing loop does not run.
             if not latents_total:
@@ -440,21 +438,31 @@ class FlashVSRFullPipeline(BasePipeline):
                 pre_cache_v = [None] * len(self.dit.blocks)
                 LQ_latents = None
                 inner_loop_num = 7
-                for inner_idx in range(inner_loop_num):
-                    cur = self.denoising_model().LQ_proj_in.stream_forward(
-                        LQ_video[:, :, max(0, inner_idx*4-3):(inner_idx+1)*4-3, :, :]
-                    ) if LQ_video is not None else None
-                    if cur is None:
-                        continue
-                    if LQ_latents is None:
-                        LQ_latents = cur
-                    else:
-                        for layer_idx in range(len(LQ_latents)):
-                            LQ_latents[layer_idx] = torch.cat([LQ_latents[layer_idx], cur[layer_idx]], dim=1)
+                # --- START: MODIFICATION ---
+                # Check if LQ_video exists before processing it.
+                if LQ_video is not None:
+                    num_lq_frames = LQ_video.shape[2]
+                    for inner_idx in range(inner_loop_num):
+                        # Ensure we don't slice beyond the available frames, which would create an empty tensor.
+                        start_frame = max(0, inner_idx * 4 - 3)
+                        if start_frame >= num_lq_frames:
+                            break
+                        
+                        end_frame = (inner_idx + 1) * 4 - 3
+                        lq_chunk = LQ_video[:, :, start_frame:end_frame, :, :]
+                        
+                        cur = self.denoising_model().LQ_proj_in.stream_forward(lq_chunk)
+                        # --- END: MODIFICATION ---
+                        
+                        if cur is None:
+                            continue
+                        if LQ_latents is None:
+                            LQ_latents = cur
+                        else:
+                            for layer_idx in range(len(LQ_latents)):
+                                LQ_latents[layer_idx] = torch.cat([LQ_latents[layer_idx], cur[layer_idx]], dim=1)
 
                 # Process the available latents in a single, non-streaming pass.
-                # The original logic processes up to 6 latent frames in the first chunk,
-                # which is sufficient for short videos. Slicing handles cases with fewer frames.
                 cur_latents = latents[:, :, :6, :, :]
                 
                 noise_pred_posi, _, _ = model_fn_wan_video(
@@ -479,7 +487,6 @@ class FlashVSRFullPipeline(BasePipeline):
 
                 cur_latents = cur_latents - noise_pred_posi
                 latents_total.append(cur_latents)
-            # --- END: MODIFICATION ---
 
             latents = torch.cat(latents_total, dim=2)
             self.dit.to("cpu")
