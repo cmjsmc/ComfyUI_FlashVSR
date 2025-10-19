@@ -431,6 +431,56 @@ class FlashVSRFullPipeline(BasePipeline):
                 cur_latents = cur_latents - noise_pred_posi
                 latents_total.append(cur_latents)
 
+            # --- START: MODIFICATION ---
+            # This block provides a fallback for single images or short videos
+            # where the main processing loop does not run.
+            if not latents_total:
+                # This logic is adapted from the first iteration (cur_process_idx == 0) of the stream.
+                pre_cache_k = [None] * len(self.dit.blocks)
+                pre_cache_v = [None] * len(self.dit.blocks)
+                LQ_latents = None
+                inner_loop_num = 7
+                for inner_idx in range(inner_loop_num):
+                    cur = self.denoising_model().LQ_proj_in.stream_forward(
+                        LQ_video[:, :, max(0, inner_idx*4-3):(inner_idx+1)*4-3, :, :]
+                    ) if LQ_video is not None else None
+                    if cur is None:
+                        continue
+                    if LQ_latents is None:
+                        LQ_latents = cur
+                    else:
+                        for layer_idx in range(len(LQ_latents)):
+                            LQ_latents[layer_idx] = torch.cat([LQ_latents[layer_idx], cur[layer_idx]], dim=1)
+
+                # Process the available latents in a single, non-streaming pass.
+                # The original logic processes up to 6 latent frames in the first chunk,
+                # which is sufficient for short videos. Slicing handles cases with fewer frames.
+                cur_latents = latents[:, :, :6, :, :]
+                
+                noise_pred_posi, _, _ = model_fn_wan_video(
+                    self.dit,
+                    x=cur_latents,
+                    timestep=self.timestep,
+                    context=None,
+                    tea_cache=None,
+                    use_unified_sequence_parallel=False,
+                    LQ_latents=LQ_latents,
+                    is_full_block=is_full_block,
+                    is_stream=False, # Set to False for a single pass
+                    pre_cache_k=pre_cache_k,
+                    pre_cache_v=pre_cache_v,
+                    topk_ratio=topk_ratio,
+                    kv_ratio=kv_ratio,
+                    cur_process_idx=0,
+                    t_mod=self.t_mod,
+                    t=self.t,
+                    local_range=local_range,
+                )
+
+                cur_latents = cur_latents - noise_pred_posi
+                latents_total.append(cur_latents)
+            # --- END: MODIFICATION ---
+
             latents = torch.cat(latents_total, dim=2)
             self.dit.to("cpu")
             torch.cuda.empty_cache
@@ -439,7 +489,7 @@ class FlashVSRFullPipeline(BasePipeline):
 
             # 颜色校正（wavelet）
             try:
-                if color_fix:
+                if color_fix and LQ_video is not None:
                     frames = self.ColorCorrector(
                         frames.to(device=LQ_video.device),
                         LQ_video[:, :, :frames.shape[2], :, :],
