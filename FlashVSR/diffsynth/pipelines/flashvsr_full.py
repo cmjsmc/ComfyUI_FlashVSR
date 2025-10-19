@@ -348,18 +348,13 @@ class FlashVSRFullPipeline(BasePipeline):
         # Tiler 参数
         tiler_kwargs = {"tiled": tiled, "tile_size": tile_size, "tile_stride": tile_stride}
 
-        # --- START: MODIFICATION ---
         # 初始化噪声
-        # The original logic could produce a temporal dimension of 0 if `num_frames` was small
-        # (e.g., 1) and `if_buffer` was True. This caused a crash in subsequent Conv3D layers.
-        # The fix is to ensure the temporal dimension is always at least 1.
         if if_buffer:
             t_dim = max(1, (num_frames - 1) // 4)
             noise = self.generate_noise((1, 16, t_dim, height//8, width//8), seed=seed, device=self.device, dtype=self.torch_dtype)
         else:
             t_dim = (num_frames - 1) // 4 + 1
             noise = self.generate_noise((1, 16, t_dim, height//8, width//8), seed=seed, device=self.device, dtype=self.torch_dtype)
-        # --- END: MODIFICATION ---
         
         latents = noise
 
@@ -465,9 +460,20 @@ class FlashVSRFullPipeline(BasePipeline):
                             for layer_idx in range(len(LQ_latents)):
                                 LQ_latents[layer_idx] = torch.cat([LQ_latents[layer_idx], cur[layer_idx]], dim=1)
 
-                # Process the available latents in a single, non-streaming pass.
                 cur_latents = latents[:, :, :6, :, :]
                 
+                # --- START: MODIFICATION ---
+                # The model requires the temporal dimension to be a multiple of the window size (2).
+                # We pad the input if necessary and slice the output to match the original frame count.
+                original_f = cur_latents.shape[2]
+                temporal_window_size = 2  # Hardcoded in SelfAttention
+                
+                if original_f % temporal_window_size != 0:
+                    pad_f = temporal_window_size - (original_f % temporal_window_size)
+                    # Pad arguments are for last dims first: (W_pad, H_pad, F_pad)
+                    cur_latents = F.pad(cur_latents, (0, 0, 0, 0, 0, pad_f), mode='replicate')
+                # --- END: MODIFICATION ---
+
                 noise_pred_posi, _, _ = model_fn_wan_video(
                     self.dit,
                     x=cur_latents,
@@ -488,8 +494,14 @@ class FlashVSRFullPipeline(BasePipeline):
                     local_range=local_range,
                 )
 
-                cur_latents = cur_latents - noise_pred_posi
-                latents_total.append(cur_latents)
+                denoised_latents = cur_latents - noise_pred_posi
+                
+                # --- START: MODIFICATION ---
+                # Slice back to the original frame count before appending
+                denoised_latents = denoised_latents[:, :, :original_f, :, :]
+                # --- END: MODIFICATION ---
+
+                latents_total.append(denoised_latents)
 
             latents = torch.cat(latents_total, dim=2)
             self.dit.to("cpu")
