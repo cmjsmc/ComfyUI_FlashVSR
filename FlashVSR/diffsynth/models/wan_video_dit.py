@@ -468,9 +468,15 @@ class SelfAttention(nn.Module):
         x = WindowPartition3D.reverse(x, win, (f, h, w))
         x = x.view(B, f*h*w, D)
 
+        # --- START: MODIFICATION ---
+        # Ensure a consistent return signature (3 values) regardless of the is_stream flag.
+        # In non-streaming mode, the cache values are None, which is handled correctly by the caller.
+        output = self.o(x)
         if is_stream:
-            return self.o(x), cache_k, cache_v
-        return self.o(x)
+            return output, cache_k, cache_v
+        else:
+            return output, None, None
+        # --- END: MODIFICATION ---
 
 
 class CrossAttention(nn.Module):
