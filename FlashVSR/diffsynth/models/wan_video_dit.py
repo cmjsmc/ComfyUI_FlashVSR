@@ -567,9 +567,15 @@ class DiTBlock(nn.Module):
         x = x + self.cross_attn(self.norm3(x), context, is_stream=is_stream)
         input_x = modulate(self.norm2(x), shift_mlp, scale_mlp)
         x = self.gate(x, gate_mlp, self.ffn(input_x))
+
+        # --- START: MODIFICATION ---
+        # Ensure a consistent return signature (3 values) regardless of the is_stream flag.
+        # This matches the calling code's expectation in model_fn_wan_video.
         if is_stream:
             return x, self_attn_cache_k, self_attn_cache_v
-        return x
+        else:
+            return x, None, None
+        # --- END: MODIFICATION ---
 
 
 class MLP(torch.nn.Module):
