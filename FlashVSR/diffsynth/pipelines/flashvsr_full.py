@@ -348,12 +348,19 @@ class FlashVSRFullPipeline(BasePipeline):
         # Tiler 参数
         tiler_kwargs = {"tiled": tiled, "tile_size": tile_size, "tile_stride": tile_stride}
 
+        # --- START: MODIFICATION ---
         # 初始化噪声
+        # The original logic could produce a temporal dimension of 0 if `num_frames` was small
+        # (e.g., 1) and `if_buffer` was True. This caused a crash in subsequent Conv3D layers.
+        # The fix is to ensure the temporal dimension is always at least 1.
         if if_buffer:
-            noise = self.generate_noise((1, 16, (num_frames - 1) // 4, height//8, width//8), seed=seed, device=self.device, dtype=self.torch_dtype)
+            t_dim = max(1, (num_frames - 1) // 4)
+            noise = self.generate_noise((1, 16, t_dim, height//8, width//8), seed=seed, device=self.device, dtype=self.torch_dtype)
         else:
-            noise = self.generate_noise((1, 16, (num_frames - 1) // 4 + 1, height//8, width//8), seed=seed, device=self.device, dtype=self.torch_dtype)
-        # noise = noise.to(dtype=self.torch_dtype, device=self.device)
+            t_dim = (num_frames - 1) // 4 + 1
+            noise = self.generate_noise((1, 16, t_dim, height//8, width//8), seed=seed, device=self.device, dtype=self.torch_dtype)
+        # --- END: MODIFICATION ---
+        
         latents = noise
 
         process_total_num = (num_frames - 1) // 8 - 2
@@ -438,12 +445,9 @@ class FlashVSRFullPipeline(BasePipeline):
                 pre_cache_v = [None] * len(self.dit.blocks)
                 LQ_latents = None
                 inner_loop_num = 7
-                # --- START: MODIFICATION ---
-                # Check if LQ_video exists before processing it.
                 if LQ_video is not None:
                     num_lq_frames = LQ_video.shape[2]
                     for inner_idx in range(inner_loop_num):
-                        # Ensure we don't slice beyond the available frames, which would create an empty tensor.
                         start_frame = max(0, inner_idx * 4 - 3)
                         if start_frame >= num_lq_frames:
                             break
@@ -452,7 +456,6 @@ class FlashVSRFullPipeline(BasePipeline):
                         lq_chunk = LQ_video[:, :, start_frame:end_frame, :, :]
                         
                         cur = self.denoising_model().LQ_proj_in.stream_forward(lq_chunk)
-                        # --- END: MODIFICATION ---
                         
                         if cur is None:
                             continue
