@@ -34,7 +34,7 @@ def largest_8n1_leq(n):  # 8n+1
 def is_video(path): 
     return os.path.isfile(path) and path.lower().endswith(('.mp4','.mov','.avi','.mkv'))
 
-def pil_to_tensor_neg1_1(img: Image.Image, dtype=torch.bfloat16, device='cuda'):
+def pil_to_tensor_neg1_1(img: Image.Image, dtype=torch.float16, device='cuda'):
     t = torch.from_numpy(np.asarray(img, np.uint8)).to(device=device, dtype=torch.float32)  # HWC
     t = t.permute(2,0,1) / 255.0 * 2.0 - 1.0                                              # CHW in [-1,1]
     return t.to(dtype)
@@ -71,7 +71,7 @@ def upscale_then_center_crop(img: Image.Image, scale: int, tW: int, tH: int) -> 
     l = max(0, (sW - tW) // 2); t = max(0, (sH - tH) // 2)
     return up.crop((l, t, l + tW, t + tH))
 
-def prepare_input_tensor(path, scale: int = 4,fps=30, dtype=torch.bfloat16, device='cuda'):
+def prepare_input_tensor(path, scale: int = 4,fps=30, dtype=torch.float16, device='cuda'):
     if isinstance(path,torch.Tensor):
         total,h0,w0,_ = path.shape
         sW, sH, tW, tH = compute_scaled_and_target_dims(w0, h0, scale=scale, multiple=128)
@@ -80,7 +80,7 @@ def prepare_input_tensor(path, scale: int = 4,fps=30, dtype=torch.bfloat16, devi
         F = largest_8n1_leq(len(idx))
         idx = idx[:F]
         path=path[idx, :, :, :]
-        vid=path.permute(3,0,1,2).unsqueeze(0).to(device,dtype=torch.bfloat16)  # 1 C F H W
+        vid=path.permute(3,0,1,2).unsqueeze(0).to(device,dtype=torch.float16)  # 1 C F H W
         #print(vid.shape) #torch.Size([1, 3, 121, 768, 1280])
         return vid, tH, tW, F, fps
 
@@ -179,10 +179,10 @@ def prepare_input_tensor(path, scale: int = 4,fps=30, dtype=torch.bfloat16, devi
 
 def init_pipeline(LQ_proj_in_path="./FlashVSR/LQ_proj_in.ckpt",ckpt_path: str = "./FlashVSR/diffusion_pytorch_model_streaming_dmd.safetensors", vae_path: str = "./FlashVSR/Wan2.1_VAE.pth",device="cuda"):
     #print(torch.cuda.current_device(), torch.cuda.get_device_name(torch.cuda.current_device()))
-    mm = ModelManager(torch_dtype=torch.bfloat16, device="cpu")
+    mm = ModelManager(torch_dtype=torch.float16, device="cpu")
     mm.load_models([ckpt_path,vae_path,])
     pipe = FlashVSRFullPipeline.from_model_manager(mm, device=device)
-    pipe.denoising_model().LQ_proj_in = Buffer_LQ4x_Proj(in_dim=3, out_dim=1536, layer_num=1).to(device, dtype=torch.bfloat16)
+    pipe.denoising_model().LQ_proj_in = Buffer_LQ4x_Proj(in_dim=3, out_dim=1536, layer_num=1).to(device, dtype=torch.float16)
     if os.path.exists(LQ_proj_in_path):
         pipe.denoising_model().LQ_proj_in.load_state_dict(torch.load(LQ_proj_in_path, map_location="cpu",weights_only=False), strict=True)
     pipe.denoising_model().LQ_proj_in.to(device)
@@ -192,7 +192,7 @@ def init_pipeline(LQ_proj_in_path="./FlashVSR/LQ_proj_in.ckpt",ckpt_path: str = 
 
 
 
-def run_inference(pipe,prompt_path,input,seed,scale,kv_ratio=3.0,local_range=9,step=1,cfg_scale=1.0,sparse_ratio=2.0,tiled=True,color_fix=True,dtype=torch.bfloat16,device="cuda"):
+def run_inference(pipe,prompt_path,input,seed,scale,kv_ratio=3.0,local_range=9,step=1,cfg_scale=1.0,sparse_ratio=2.0,tiled=True,color_fix=True,dtype=torch.float16,device="cuda"):
     pipe.to('cuda'); pipe.enable_vram_management(num_persistent_param_in_dit=None)
     pipe.init_cross_kv(prompt_path); pipe.load_models_to_device(["dit","vae"])
 
