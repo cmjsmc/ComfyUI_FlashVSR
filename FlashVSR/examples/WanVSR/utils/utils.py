@@ -5,9 +5,119 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import time
-
+import math
 
 CACHE_T = 2
+
+def block_sparse_attn_func(q, k, v, cu_seqlens_q, cu_seqlens_k, head_mask_type,
+                          streaming_info, base_blockmask, max_seqlen_q_, max_seqlen_k_,
+                          p_dropout, deterministic=False, softmax_scale=None,
+                          is_causal=False, exact_streaming=False, return_attn_probs=False):
+    """
+    使用标准注意力机制替代块稀疏注意力实现
+    """
+    batch_size = 1
+    seq_len_q = q.shape[0] // batch_size
+    seq_len_k = k.shape[0] // batch_size
+    num_heads = q.shape[1]
+    head_dim = q.shape[2]
+    
+    # 重塑张量为标准注意力格式
+    q = q.view(batch_size, seq_len_q, num_heads, head_dim).transpose(1, 2)  # (B, H, S_q, D)
+    k = k.view(batch_size, seq_len_k, num_heads, head_dim).transpose(1, 2)  # (B, H, S_k, D)
+    v = v.view(batch_size, seq_len_k, num_heads, head_dim).transpose(1, 2)  # (B, H, S_k, D)
+    
+    # 使用 F.scaled_dot_product_attention，它能更好地处理各种情况
+    if base_blockmask is not None:
+        if base_blockmask.dim() == 2:
+            attn_mask = base_blockmask.unsqueeze(0).unsqueeze(0)
+            attn_mask = attn_mask.expand(batch_size, num_heads, -1, -1)
+        elif base_blockmask.dim() == 4:
+            attn_mask = base_blockmask
+        else:
+            attn_mask = None
+        if attn_mask is not None:
+            _, _, mask_seq_q, mask_seq_k = attn_mask.shape
+
+            target_seq_q = seq_len_q
+            target_seq_k = seq_len_k
+            #print(f"Attention mask shape: {attn_mask.shape},{target_seq_q},{target_seq_k}")
+            #Attention mask shape:  torch.Size([1, 12, 24, 96]),3072,12288
+            # 使用插值方法进行扩展，模式为 nearest 以保持稀疏结构
+            if mask_seq_q != target_seq_q or mask_seq_k != target_seq_k:
+                try:
+                    attn_mask = F.interpolate(
+                        attn_mask.float(), 
+                        size=(target_seq_q, target_seq_k), 
+                        mode='nearest'
+                    ).to(attn_mask.dtype)
+                except torch.OutOfMemoryError:
+                    # 如果直接插值OOM，则分块处理
+                    print("Direct interpolation OOM, using chunked processing")
+                    attn_mask = chunked_interpolate(attn_mask, (target_seq_q, target_seq_k))
+    else:
+        attn_mask = None
+    training=False 
+    try:
+        output = F.scaled_dot_product_attention(
+            q, k, v, 
+            attn_mask=attn_mask if attn_mask is not None else None,
+            dropout_p=p_dropout if training else 0.0,
+            is_causal=is_causal
+        )
+    except Exception:
+        attention_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(head_dim)
+        if attn_mask is not None:
+            if attn_mask.shape != attention_scores.shape:
+                min_shape = [min(a, b) for a, b in zip(attn_mask.shape, attention_scores.shape)]
+                attn_mask = attn_mask[:min_shape[0], :min_shape[1], :min_shape[2], :min_shape[3]]
+                attention_scores = attention_scores[:min_shape[0], :min_shape[1], :min_shape[2], :min_shape[3]]
+            if attn_mask.dtype == torch.bool:
+                attention_scores = attention_scores.masked_fill(~attn_mask, float('-inf'))
+            else:
+                attention_scores = attention_scores + attn_mask
+        attention_weights = F.softmax(attention_scores, dim=-1)
+        output = torch.matmul(attention_weights, v)
+    output = output.transpose(1, 2).contiguous().view(batch_size * seq_len_q, num_heads, head_dim)
+    return output.squeeze(0) 
+
+def chunked_interpolate(tensor, target_size, chunk_size=1024):
+    """
+    分块插值以减少内存消耗
+    """
+    batch, heads, h, w = tensor.shape
+    target_h, target_w = target_size
+    
+    output = torch.zeros(batch, heads, target_h, target_w, dtype=tensor.dtype, device=tensor.device)
+    
+    chunk_h = min(chunk_size, h)
+    chunk_w = min(chunk_size, w)
+    
+    for i in range(0, h, chunk_h):
+        for j in range(0, w, chunk_w):
+            end_i = min(i + chunk_h, h)
+            end_j = min(j + chunk_w, w)
+
+            chunk = tensor[:, :, i:end_i, j:end_j]
+            
+
+            target_end_i = int(target_h * end_i / h)
+            target_start_i = int(target_h * i / h)
+            target_end_j = int(target_w * end_j / w)
+            target_start_j = int(target_w * j / w)
+            
+
+            if chunk.numel() > 0:
+                interpolated = F.interpolate(
+                    chunk.float(),
+                    size=(target_end_i - target_start_i, target_end_j - target_start_j),
+                    mode='nearest'
+                ).to(tensor.dtype)
+                
+
+                output[:, :, target_start_i:target_end_i, target_start_j:target_end_j] = interpolated
+                
+    return output
 
 
 class RMS_norm(nn.Module):
