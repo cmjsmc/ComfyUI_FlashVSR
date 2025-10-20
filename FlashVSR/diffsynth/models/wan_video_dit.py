@@ -31,99 +31,12 @@ import numpy as np
 
 
 
-
-def block_sparse_attn_func_(q, k, v, cu_seqlens_q, cu_seqlens_k, head_mask_type,
-                          streaming_info, base_blockmask, max_seqlen_q_, max_seqlen_k_,
-                          p_dropout, deterministic=False, softmax_scale=None,
-                          is_causal=False, exact_streaming=False, return_attn_probs=False):
-    """
-    使用标准注意力机制替代块稀疏注意力实现
-    """
-    # q, k, v 的形状: (batch_size * seq_len, num_heads, head_dim)
-    batch_size = 1
-    seq_len_q = q.shape[0] // batch_size
-    seq_len_k = k.shape[0] // batch_size
-    num_heads = q.shape[1]
-    head_dim = q.shape[2]
-    
-    # 重塑张量为标准注意力格式
-    q = q.view(batch_size, seq_len_q, num_heads, head_dim).transpose(1, 2)  # (B, H, S_q, D)
-    k = k.view(batch_size, seq_len_k, num_heads, head_dim).transpose(1, 2)  # (B, H, S_k, D)
-    v = v.view(batch_size, seq_len_k, num_heads, head_dim).transpose(1, 2)  # (B, H, S_k, D)
-    
-    # 使用 F.scaled_dot_product_attention，它能更好地处理各种情况
-    if base_blockmask is not None:
-        # 确保 base_blockmask 形状正确
-        # 调整 base_blockmask 维度以匹配注意力计算
-        if base_blockmask.dim() == 2:
-            # 扩展维度以匹配 (B, H, S, S)
-            attn_mask = base_blockmask.unsqueeze(0).unsqueeze(0)
-            # 扩展 head 维度
-            attn_mask = attn_mask.expand(batch_size, num_heads, -1, -1)
-        elif base_blockmask.dim() == 4:
-            attn_mask = base_blockmask
-        else:
-            # 如果维度不匹配，使用无掩码的注意力
-            attn_mask = None
-            
-        # 如果 attn_mask 与序列长度不匹配，进行插值或裁剪
-        if attn_mask is not None:
-            _, _, mask_seq_q, mask_seq_k = attn_mask.shape
-            if mask_seq_q != seq_len_q or mask_seq_k != seq_len_k:
-                # 调整掩码尺寸
-                attn_mask = F.interpolate(
-                    attn_mask.float(), 
-                    size=(seq_len_q, seq_len_k), 
-                    mode='nearest'
-                ).to(attn_mask.dtype)
-    else:
-        attn_mask = None
-
-    training=False
-    
-    try:
-        # 使用 PyTorch 内置的缩放点积注意力
-        output = F.scaled_dot_product_attention(
-            q, k, v, 
-            attn_mask=attn_mask if attn_mask is not None else None,
-            dropout_p=p_dropout if training else 0.0,
-            is_causal=is_causal
-        )
-    except Exception:
-        # 如果内置函数失败，回退到手动实现
-        # 计算注意力分数
-        attention_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(head_dim)
-        
-        # 应用掩码
-        if attn_mask is not None:
-            # 确保 attn_mask 与 attention_scores 形状匹配
-            if attn_mask.shape != attention_scores.shape:
-                # 取较小的尺寸
-                min_shape = [min(a, b) for a, b in zip(attn_mask.shape, attention_scores.shape)]
-                # 裁剪到相同尺寸
-                attn_mask = attn_mask[:min_shape[0], :min_shape[1], :min_shape[2], :min_shape[3]]
-                attention_scores = attention_scores[:min_shape[0], :min_shape[1], :min_shape[2], :min_shape[3]]
-            
-            # 应用掩码
-            if attn_mask.dtype == torch.bool:
-                attention_scores = attention_scores.masked_fill(~attn_mask, float('-inf'))
-            else:
-                attention_scores = attention_scores + attn_mask
-        
-        # 计算注意力权重
-        attention_weights = F.softmax(attention_scores, dim=-1)
-        # 计算输出
-        output = torch.matmul(attention_weights, v)
-    
-    # 转换回期望的输出格式
-    output = output.transpose(1, 2).contiguous().view(batch_size * seq_len_q, num_heads, head_dim)
-    
-    return output.squeeze(0)  # 如果batch_size为1，则移除多余的维度
-
 try:
     from block_sparse_attn import block_sparse_attn_func
+    print("Using origin  block_sparse_attn")
 except:
-    block_sparse_attn_func = block_sparse_attn_func_
+    print("Using wrapper block_sparse_attn ,need to install block_sparse_attn to get better performance")
+    from ...examples.WanVSR.utils.utils import block_sparse_attn_func
 
 
 # ----------------------------
@@ -204,7 +117,6 @@ class WindowPartition3D:
         x = windows.view(B, nf, nh, nw, wf, wh, ww, -1)
         x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous()
         return x.view(B, F, H, W, -1)
-
 
 @torch.no_grad()
 def generate_draft_block_mask(batch_size, nheads, seqlen,
