@@ -33,9 +33,9 @@ import numpy as np
 
 try:
     from block_sparse_attn import block_sparse_attn_func
-    print("Using origin  block_sparse_attn")
+    print("*****************Using origin block_sparse_attn,成功导入block_sparse_attn*******************")
 except:
-    print("Using wrapper block_sparse_attn ,need to install block_sparse_attn to get better performance")
+    print("**************导入block_sparse_attn失败,调用临时函数;Using wrapper block_sparse_attn ,need to install block_sparse_attn to get better performance*************")
     from ...examples.WanVSR.utils.utils import block_sparse_attn_func
 
 
@@ -361,8 +361,11 @@ class SelfAttention(nn.Module):
 
         window_size = win[0]*h*w//128
 
-        if self.local_attn_mask is None or self.local_attn_mask.shape[0]!=(h//8)*(w//8):
+        if self.local_attn_mask is None or self.local_attn_mask_h!=h//8 or self.local_attn_mask_w!=w//8 or self.local_range!=local_range:
             self.local_attn_mask = build_local_block_mask_shifted_vec_normal_slide(h//8, w//8, local_range, local_range, include_self=True, device=k_w.device)
+            self.local_attn_mask_h = h//8
+            self.local_attn_mask_w = w//8
+            self.local_range = local_range
         attention_mask = generate_draft_block_mask(B, self.num_heads, seqlen, q_w, k_w, topk=topk, local_attn_mask=self.local_attn_mask)
 
         x = self.attn(reorder_q, reorder_k, reorder_v, attention_mask)
