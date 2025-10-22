@@ -142,7 +142,7 @@ def prepare_input_tensor(path, scale: int = 4,fps=30,dtype=torch.bfloat16, devic
             frames.append(pil_to_tensor_neg1_1(img_out, dtype, device))
         frames = torch.stack(frames, 0).permute(1,0,2,3).unsqueeze(0)  # 1 C F H W  
         torch.cuda.empty_cache()
-        return vid, tH, tW, F, fps
+        return frames, tH, tW, F, fps
         
     elif os.path.isdir(path):
         paths0 = list_images_natural(path)
