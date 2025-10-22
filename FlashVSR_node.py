@@ -4,7 +4,7 @@
 import numpy as np
 import torch
 import os
-from .model_loader_utils import  tensor_upscale
+from .model_loader_utils import  tensor_upscale,load_images_list
 from .FlashVSR.examples.WanVSR.infer_flashvsr_full import init_pipeline,run_inference
 from .FlashVSR.examples.WanVSR.infer_flashvsr_tiny import   init_pipeline_tiny,run_inference_tiny
 import folder_paths
@@ -39,6 +39,7 @@ class FlashVSR_SM_Model(io.ComfyNode):
             inputs=[
                 io.Combo.Input("dit",options= ["none"] + [i for i in folder_paths.get_filename_list("FlashVSR") if "dmd" in i.lower()]),
                 io.Combo.Input("proj_pt",options= ["none"] + [i for i in folder_paths.get_filename_list("FlashVSR") if "proj" in i.lower()]),
+                io.Combo.Input("emb_pt",options= ["none"] + [i for i in folder_paths.get_filename_list("FlashVSR") if "prompt" in i.lower()]),
                 io.Combo.Input("vae",options= ["none"] + folder_paths.get_filename_list("vae") ),
                 io.Combo.Input("tcd_encoder",options= ["none"] + [i for i in folder_paths.get_filename_list("FlashVSR") if "tcd" in i.lower()] ),
             ],
@@ -47,17 +48,19 @@ class FlashVSR_SM_Model(io.ComfyNode):
                 ],
             )
     @classmethod
-    def execute(cls, dit,proj_pt,vae,tcd_encoder) -> io.NodeOutput:
+    def execute(cls, dit,proj_pt,emb_pt,vae,tcd_encoder) -> io.NodeOutput:
         dit_path=folder_paths.get_full_path("FlashVSR", dit) if dit != "none" else None
         proj_pt_path=folder_paths.get_full_path("FlashVSR", proj_pt) if proj_pt != "none" else None
         vae_path=folder_paths.get_full_path("vae", vae) if vae != "none" else None
         tcd_encoder_path=folder_paths.get_full_path("FlashVSR", tcd_encoder) if tcd_encoder != "none" else None
+        prompt_path=folder_paths.get_full_path("FlashVSR", emb_pt) if emb_pt != "none" else None
+        assert prompt_path is not None  , "Please select the emb"
         assert dit_path is not None and proj_pt is not None , "Please select the Sdit,proj_pt,checkpoint file"
         assert vae_path is not None or tcd_encoder_path is not None , "Please select the Sdit,proj_pt,checkpoint file"
         if vae_path is None and tcd_encoder_path is not None:
-            model=init_pipeline_tiny(proj_pt_path,dit_path, tcd_encoder_path, device="cuda")
+            model=init_pipeline_tiny(prompt_path,proj_pt_path,dit_path, tcd_encoder_path, device="cuda")
         else:
-            model=init_pipeline(proj_pt_path,dit_path, vae_path, device="cuda")
+            model=init_pipeline(prompt_path,proj_pt_path,dit_path, vae_path, device="cuda")
         return io.NodeOutput(model)
     
 
@@ -71,7 +74,6 @@ class FlashVSR_SM_KSampler(io.ComfyNode):
             inputs=[
                 io.Custom("FlashVSR_SM_Model").Input("model"),
                 io.Image.Input("image"),
-                io.Combo.Input("emb_pt",options= ["none"] + [i for i in folder_paths.get_filename_list("FlashVSR") if "prompt" in i.lower()]),
                 io.Int.Input("width", default=1280, min=128, max=nodes.MAX_RESOLUTION,step=64,display_mode=io.NumberDisplay.number),
                 io.Int.Input("height", default=768, min=128, max=nodes.MAX_RESOLUTION,step=64,display_mode=io.NumberDisplay.number),
                 io.Int.Input("seed", default=0, min=0, max=MAX_SEED),
@@ -80,28 +82,28 @@ class FlashVSR_SM_KSampler(io.ComfyNode):
                 io.Int.Input("local_range", default=11, min=1,step=1, max=50),
                 io.Int.Input("steps", default=1, min=1, max=10000),
                 io.Float.Input("cfg", default=1.0, min=0.0, max=100.0, step=0.1, round=0.01,),
-                io.Float.Input("sparse_ratio", default=2.0, min=0.0, max=10.0, step=0.1,display_mode=io.NumberDisplay.slider), 
+                io.Float.Input("sparse_ratio", default=2.0, min=0.0, max=10.0, step=0.1,), 
                 io.Boolean.Input("full_tiled", default=True),
                 io.Boolean.Input("color_fix", default=True),
-
+                io.Combo.Input("fix_method",options= ["wavelet","adain"]),
+                io.Int.Input("split_num", default=81, min=41, max=MAX_SEED,step=40,),
             ],
             outputs=[
                 io.Image.Output(display_name="images"),
             ],
         )
     @classmethod
-    def execute(cls, model,image,emb_pt,width,height,seed,scale,kv_ratio,local_range, steps, cfg,sparse_ratio,full_tiled,color_fix) -> io.NodeOutput:
+    def execute(cls, model,image,width,height,seed,scale,kv_ratio,local_range, steps, cfg,sparse_ratio,full_tiled,color_fix,fix_method,split_num) -> io.NodeOutput:
         image=tensor_upscale(image,width, height)
-        prompt_path=folder_paths.get_full_path("FlashVSR", emb_pt) if emb_pt != "none" else None
-        assert prompt_path is not None  , "Please select the emb"
+       
         if hasattr(model,"TCDecoder") :
             print("infer tiny mode")
-            images=run_inference_tiny(model,prompt_path,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio,color_fix )
+            images=run_inference_tiny(model,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio,color_fix,fix_method,split_num )
         else:
             print("infer full mode")
-            images=run_inference(model,prompt_path,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio,full_tiled,color_fix )
-     
-        return io.NodeOutput(images.float())
+            images=run_inference(model,image,seed,scale,kv_ratio,local_range,steps,cfg,sparse_ratio,full_tiled,color_fix,fix_method,split_num )
+        images=load_images_list(images)
+        return io.NodeOutput(images)
 
 from aiohttp import web
 from server import PromptServer
