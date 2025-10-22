@@ -164,6 +164,7 @@ class FlashVSRTinyPipeline(BasePipeline):
         self.prompt_emb_posi = None
         self.ColorCorrector = TorchColorCorrectorWavelet(levels=5)
 
+
         print(r"""
 ███████╗██╗      █████╗ ███████╗██╗  ██╗██╗   ██╗███████╗█████╗
 ██╔════╝██║     ██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝██╔══██╗
@@ -415,22 +416,22 @@ class FlashVSRTinyPipeline(BasePipeline):
             latents = torch.cat(latents_total, dim=2)
 
             # Decode
-            frames = self.TCDecoder.decode_video(latents.transpose(1, 2),parallel=False, show_progress_bar=False, cond=LQ_video[:,:,:LQ_cur_idx,:,:]).transpose(1, 2).mul_(2).sub_(1)
+            #frames = self.TCDecoder.decode_video(latents.transpose(1, 2),parallel=False, show_progress_bar=False, cond=LQ_video[:,:,:LQ_cur_idx,:,:]).transpose(1, 2).mul_(2).sub_(1)
 
             # 颜色校正（wavelet）
-            try:
-                if color_fix:
-                    frames = self.ColorCorrector(
-                        frames.to(device=LQ_video.device),
-                        LQ_video[:, :, :frames.shape[2], :, :],
-                        clip_range=(-1, 1),
-                        chunk_size=16,
-                        method='adain'
-                    )
-            except:
-                pass
+            # try:
+            #     if color_fix:
+            #         frames = self.ColorCorrector(
+            #             frames.to(device=LQ_video.device),
+            #             LQ_video[:, :, :frames.shape[2], :, :],
+            #             clip_range=(-1, 1),
+            #             chunk_size=16,
+            #             method='adain'
+            #         )
+            # except:
+            #     pass
 
-        return frames[0]
+        return latents,LQ_cur_idx #frames[0]
 
 
 # -----------------------------
